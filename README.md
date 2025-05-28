@@ -2,9 +2,13 @@
 
 This repository contains the automated testing suite for the GUDPPL application using Playwright.
 
+## 🚀 Status
+
+![Playwright Tests](https://github.com/YOUR_USERNAME/gudppl/actions/workflows/playwright.yml/badge.svg)
+
 ## 🚀 Features
 
-- End-to-end testing of user registration and login flows
+- End-to-end testing of user registration and login flows (Chromium browser)
 - Organization management testing (create, join, leave)
 - Profile management and preferences testing
 - Hours management testing
@@ -39,24 +43,24 @@ npx playwright install
 
 ## 🧪 Running Tests
 
-Run all tests:
+Run all tests (Chromium only):
 ```bash
-npx playwright test
+npx playwright test --project=chromium
 ```
 
-Run tests in headed mode (with browser UI):
+Run tests in headed mode:
 ```bash
-npx playwright test --headed
+npx playwright test --project=chromium --headed
 ```
 
 Run specific test file:
 ```bash
-npx playwright test tests/smokeTest.spec.ts
+npx playwright test tests/smokeTest.spec.ts --project=chromium
 ```
 
 Run tests with specific tag:
 ```bash
-npx playwright test -g "@regression"
+npx playwright test -g "@regression" --project=chromium
 ```
 
 ## 📝 Test Structure
