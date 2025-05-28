@@ -32,10 +32,14 @@ jobs:
     - name: Install dependencies
       run: npm ci
     
-    - name: Install Playwright (Chromium only)
+    - name: Install Playwright
       run: |
+        # Install Playwright and its dependencies
         npx playwright install chromium
         npx playwright install-deps chromium
+        # Verify installation
+        npx playwright --version
+        ls -la node_modules/playwright-core/.local-browsers/
     
     - name: Run Smoke Tests
       run: |
@@ -48,7 +52,6 @@ jobs:
       env:
         CI: true
         PWDEBUG: 0
-        PLAYWRIGHT_BROWSERS_PATH: 0
     
     - name: Upload test results
       if: always()
