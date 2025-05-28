@@ -1,4 +1,5 @@
 import { Page } from '@playwright/test';
+import { testData } from '../data/testData';
 
 export class SignupPage {
     private page: Page;
@@ -17,14 +18,14 @@ export class SignupPage {
     }
 
     async navigateToSignup() {
-        await this.page.goto('https://next.gudppl.com/signup');
+        await this.page.goto(`${testData.urls.baseUrl}/signup`);
     }
 
     async getWebhookUUID(request: any) {
-        const response = await request.post('https://webhook.site/token/');
+        const response = await request.post(testData.urls.webhookBase);
         const responseBody = JSON.parse(await response.text());
         console.log('Created webhook with UUID:', responseBody.uuid);
-        console.log('Webhook URL:', `https://webhook.site/${responseBody.uuid}`);
+        console.log('Webhook URL:', `${testData.urls.webhookBase}${responseBody.uuid}`);
         return responseBody.uuid;
     }
 
@@ -35,10 +36,13 @@ export class SignupPage {
         await this.page.getByRole('checkbox').check();
         await this.page.getByRole('button', { name: 'Create account' }).click();
         console.log('Signup form submitted');
+        
+        // Wait for any network requests to complete
+        await this.page.waitForLoadState('networkidle');
     }
 
     async getOTPFromWebhook(request: any, uuid: string, maxRetries = 3) {
-        const webhookUrl = `https://webhook.site/token/${uuid}/requests?page=1&password=&query=&sorting=oldest`;
+        const webhookUrl = `${testData.urls.webhookBase}${uuid}/requests?page=1&password=&query=&sorting=oldest`;
         console.log('Checking webhook URL:', webhookUrl);
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
