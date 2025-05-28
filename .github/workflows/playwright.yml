@@ -39,12 +39,12 @@ jobs:
         npx playwright install-deps chromium
         # Verify installation
         npx playwright --version
-        ls -la node_modules/playwright-core/.local-browsers/
+        ls -la ~/.cache/ms-playwright/
     
     - name: Run Smoke Tests
       run: |
         # Run tests with Chromium project
-        npx playwright test tests/smokeTest.spec.ts \
+        PLAYWRIGHT_BROWSERS_PATH=~/.cache/ms-playwright npx playwright test tests/smokeTest.spec.ts \
           --retries=2 \
           --timeout=300000 \
           --project=chromium \
