@@ -39,10 +39,30 @@ export class SignupPage {
         const response = await request.get(`https://webhook.site/token/${uuid}/requests?page=1&password=&query=&sorting=oldest`);
         const responseBody = JSON.parse(await response.text());
         
-        const dataArray = responseBody.data;
-        let text_content = dataArray[0].text_content;
+        console.log('Webhook response:', JSON.stringify(responseBody, null, 2));
+        
+        if (!responseBody.data || !Array.isArray(responseBody.data) || responseBody.data.length === 0) {
+            console.error('No data in webhook response');
+            throw new Error('No data received from webhook');
+        }
+
+        const firstRequest = responseBody.data[0];
+        if (!firstRequest || !firstRequest.text_content) {
+            console.error('Invalid request data:', firstRequest);
+            throw new Error('Invalid request data from webhook');
+        }
+
+        const text_content = firstRequest.text_content;
+        console.log('Email content:', text_content);
+        
         const codeMatch = text_content.match(/\d{6}/);
-        return codeMatch ? codeMatch[0] : null;
+        if (!codeMatch) {
+            console.error('No OTP code found in email content');
+            throw new Error('No OTP code found in email');
+        }
+
+        console.log('Found OTP code:', codeMatch[0]);
+        return codeMatch[0];
     }
 
     async enterOTP(otp: string) {
