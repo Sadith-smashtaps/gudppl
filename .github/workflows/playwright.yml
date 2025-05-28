@@ -22,11 +22,18 @@ jobs:
     - name: Install dependencies
       run: npm ci
     
-    - name: Install Playwright Browsers
-      run: npx playwright install --with-deps chromium
+    - name: Install Playwright
+      run: |
+        npx playwright install --with-deps
+        npx playwright install-deps
     
     - name: Run Smoke Tests
       run: |
+        # Set environment variables
+        export PLAYWRIGHT_BROWSERS_PATH=$HOME/pw-browsers
+        export CI=true
+        
+        # Run tests
         npx playwright test tests/smokeTest.spec.ts \
           --retries=2 \
           --timeout=300000 \
@@ -35,7 +42,6 @@ jobs:
       env:
         CI: true
         PWDEBUG: 0
-        PLAYWRIGHT_BROWSERS_PATH: 0
     
     - name: Upload test results
       if: always()
