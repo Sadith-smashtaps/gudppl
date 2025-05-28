@@ -39,13 +39,12 @@ jobs:
     
     - name: Run Smoke Tests
       run: |
-        # Ensure we only run on Chromium
+        # Run tests with Chromium project
         npx playwright test tests/smokeTest.spec.ts \
           --retries=2 \
           --timeout=300000 \
           --project=chromium \
-          --workers=1 \
-          --browser=chromium
+          --workers=1
       env:
         CI: true
         PWDEBUG: 0
