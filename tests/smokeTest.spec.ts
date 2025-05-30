@@ -11,11 +11,12 @@ import { testData } from './data/testData';
 let createdOrgName: string;
 let newUserEmail: string;
 
+// Configure global timeout
 test.describe.configure({ timeout: 600000 });
-test.describe.serial('User Registration and Login Flow', () => {
+
+// Separate describe blocks for independent test groups
+test.describe('User Registration', () => {
     const password = testData.signupCredentials.password;
-    const existingUserEmail = "wishu1219+183@gmail.com";
-    const existingUserPassword = "Bachu@121989";
 
     test('Create new user with OTP and email verification @regression', async ({ page, request }) => {
         const signupPage = new SignupPage(page);
@@ -46,21 +47,25 @@ test.describe.serial('User Registration and Login Flow', () => {
             // Check if it's a Cognito email limit error
             if (error?.message && typeof error.message === 'string' && error.message.includes('Exceeded daily email limit')) {
                 console.warn('Cognito email limit reached. Consider configuring SES or using a different user pool for testing.');
-                // Instead of skipping, we'll mark the test as failed with a specific message
                 throw new Error('Test failed due to Cognito email limit. Please configure SES or use a different user pool for testing.');
             }
             throw error;
         }
     });
+});
+
+test.describe('User Profile and Preferences', () => {
+    const password = testData.signupCredentials.password;
+    const existingUserEmail = "wishu1219+183@gmail.com";
 
     test('Login and complete profile preferences @regression', async ({ page }) => {
         const loginPage = new LoginPage(page);
         const preferencesPage = new UserPreferencesPage(page);
         const { firstName, lastName, dateOfBirth, phoneNumber, bio } = testData.profilePreferences;
 
-        // Login
+        // Login with existing user instead of newly created one
         await loginPage.navigateToLoginPage();
-        await loginPage.login(newUserEmail, password);
+        await loginPage.login(existingUserEmail, password);
 
         // Fill all preference steps
         await preferencesPage.fillPersonalInfo(
@@ -82,15 +87,20 @@ test.describe.serial('User Registration and Login Flow', () => {
         const welcomeMessage = await preferencesPage.verifyWelcomeMessage(firstName);
         await expect(welcomeMessage).toHaveText(`Hello, ${firstName}. Welcome to gudppl!`);
     });
+});
+
+test.describe('Organization Management', () => {
+    const password = testData.signupCredentials.password;
+    const existingUserEmail = "wishu1219+183@gmail.com";
 
     test('Create multiple organizations', async ({ page }) => {
         const loginPage = new LoginPage(page);
         const organizationPage = new OrganizationPage(page);
         const { numberOfOrganizations, phoneNumber, randomNumberRange } = testData.organization;
 
-        // Login
+        // Login with existing user
         await loginPage.navigateToLoginPage();
-        await loginPage.login(newUserEmail, password);
+        await loginPage.login(existingUserEmail, password);
         await page.waitForTimeout(1000);
 
         // Create multiple organizations
@@ -110,6 +120,11 @@ test.describe.serial('User Registration and Login Flow', () => {
             console.log(`Organization ${orgName} created successfully.`);
         }
     });
+});
+
+test.describe('Hours Management', () => {
+    const password = testData.signupCredentials.password;
+    const existingUserEmail = "wishu1219+183@gmail.com";
 
     test('Add hours and approve', async ({ page }) => {
         const loginPage = new LoginPage(page);
@@ -118,7 +133,7 @@ test.describe.serial('User Registration and Login Flow', () => {
 
         // Login
         await loginPage.navigateToLoginPage();
-        await loginPage.login(newUserEmail, password);
+        await loginPage.login(existingUserEmail, password);
         await page.waitForTimeout(1000);
 
         // Add hours
@@ -149,7 +164,7 @@ test.describe.serial('User Registration and Login Flow', () => {
 
         // Login
         await loginPage.navigateToLoginPage();
-        await loginPage.login(newUserEmail, password);
+        await loginPage.login(existingUserEmail, password);
         await page.waitForTimeout(1000);
 
         // Add hours
@@ -177,7 +192,7 @@ test.describe.serial('User Registration and Login Flow', () => {
 
         // Login as volunteer
         await loginPage.navigateToLoginPage();
-        await loginPage.login(newUserEmail, password);
+        await loginPage.login(existingUserEmail, password);
         await page.waitForTimeout(1000);
 
         // Submit hours with amendments
@@ -199,7 +214,7 @@ test.describe.serial('User Registration and Login Flow', () => {
 
         // Login as organization
         await loginPage.navigateToLoginPage();
-        await loginPage.login(newUserEmail, password);
+        await loginPage.login(existingUserEmail, password);
         await page.waitForTimeout(1000);
 
         // Navigate to pending hours and make amendments
@@ -215,6 +230,11 @@ test.describe.serial('User Registration and Login Flow', () => {
         // Logout as organization
         await loginPage.navigateToLoginPage();
     });
+});
+
+test.describe('User Profile', () => {
+    const password = testData.signupCredentials.password;
+    const existingUserEmail = "wishu1219+183@gmail.com";
 
     test('Update and verify user profile ', async ({ page }) => {
         const loginPage = new LoginPage(page);
@@ -222,7 +242,7 @@ test.describe.serial('User Registration and Login Flow', () => {
 
         // Login
         await loginPage.navigateToLoginPage();
-        await loginPage.login(newUserEmail, password);
+        await loginPage.login(existingUserEmail, password);
         await page.waitForTimeout(1000);
 
         // Navigate to profile and start editing
@@ -293,13 +313,18 @@ test.describe.serial('User Registration and Login Flow', () => {
             phoneNumber: '774611558'
         });
     });
+});
+
+test.describe('Organization', () => {
+    const password = testData.signupCredentials.password;
+    const existingUserEmail = "wishu1219+183@gmail.com";
 
     test('Edit organization', async ({ page }) => {
         const loginPage = new LoginPage(page);
         const organizationPage = new OrganizationPage(page);
         // Login
         await loginPage.navigateToLoginPage();
-        await loginPage.login(newUserEmail, password);
+        await loginPage.login(existingUserEmail, password);
         await page.waitForTimeout(1000);
 
         // Generate a new org name for editing
@@ -326,7 +351,7 @@ test.describe.serial('User Registration and Login Flow', () => {
 
         // Login
         await loginPage.navigateToLoginPage();
-        await loginPage.login(newUserEmail, password);
+        await loginPage.login(existingUserEmail, password);
         await page.waitForTimeout(1000);
 
         // Navigate to Impact Report
@@ -346,7 +371,7 @@ test.describe.serial('User Registration and Login Flow', () => {
 
         // Login with existing user
         await loginPage.navigateToLoginPage();
-        await loginPage.login(existingUserEmail, existingUserPassword);
+        await loginPage.login(existingUserEmail, password);
         await page.waitForTimeout(2000);
 
         // Join Organization
