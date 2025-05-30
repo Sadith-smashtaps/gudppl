@@ -2,7 +2,7 @@ name: Playwright Tests (Chromium Only)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ '**' ]
     paths:
       - 'tests/**'
       - '.github/workflows/playwright.yml'
