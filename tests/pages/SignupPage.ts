@@ -50,13 +50,17 @@ export class SignupPage {
 
     async fillSignupForm(email: string, password: string) {
         try {
-            console.log('Creating new user with credentials:', { email, password });
+            console.log('Starting signup process for:', { email });
             
             // Wait for the form to be ready
-            await this.page.waitForSelector(this.emailInput);
-            await this.page.waitForSelector(this.passwordInput);
+            await this.page.waitForSelector(this.emailInput, { state: 'visible', timeout: 10000 });
+            await this.page.waitForSelector(this.passwordInput, { state: 'visible', timeout: 10000 });
             
-            // Fill the form
+            // Clear any existing values
+            await this.page.getByPlaceholder('Enter your email address').clear();
+            await this.page.getByPlaceholder('Enter a new password').clear();
+            
+            // Fill the form with explicit waits
             await this.page.getByPlaceholder('Enter your email address').fill(email);
             await this.page.getByPlaceholder('Enter a new password').fill(password);
             await this.page.getByRole('checkbox').check();
@@ -68,28 +72,72 @@ export class SignupPage {
                 termsChecked: await this.page.getByRole('checkbox').isChecked()
             });
             
+            // Wait for the button to be enabled
+            const createAccountButton = this.page.getByRole('button', { name: 'Create account' });
+            await createAccountButton.waitFor({ state: 'visible', timeout: 5000 });
+            
+            // Start waiting for navigation before clicking
+            const navigationPromise = this.page.waitForURL('**/verify-email', { timeout: 30000 });
+            
             // Submit the form
-            await this.page.getByRole('button', { name: 'Create account' }).click();
-            console.log('Signup form submitted');
+            console.log('Clicking create account button...');
+            await createAccountButton.click();
             
-            // Wait for any network requests to complete
-            await this.page.waitForLoadState('networkidle');
-            
-            // Check for any error messages
-            const errorMessages = await this.page.getByRole('alert').allTextContents();
-            if (errorMessages.length > 0) {
-                console.error('Error messages after signup:', errorMessages);
-                throw new Error(`Signup failed: ${errorMessages.join(', ')}`);
+            // Wait for navigation
+            console.log('Waiting for navigation to verify-email page...');
+            try {
+                await navigationPromise;
+                console.log('Successfully navigated to verify-email page');
+            } catch (error) {
+                // If navigation fails, check for error messages
+                const errorMessages = await this.page.getByRole('alert').allTextContents();
+                if (errorMessages.length > 0) {
+                    console.error('Error messages after signup:', errorMessages);
+                    throw new Error(`Signup failed: ${errorMessages.join(', ')}`);
+                }
+                
+                // Check current URL
+                const currentUrl = this.page.url();
+                console.error('Navigation failed. Current URL:', currentUrl);
+                
+                // Check if we're still on the signup page
+                if (currentUrl.includes('/signup')) {
+                    // Check for any network errors
+                    const failedRequests = await this.page.evaluate(() => {
+                        const entries = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
+                        return entries
+                            .filter(entry => entry.name.includes('/api/') && entry.duration > 5000)
+                            .map(entry => ({
+                                url: entry.name,
+                                duration: entry.duration,
+                                type: entry.initiatorType
+                            }));
+                    });
+                    
+                    if (failedRequests.length > 0) {
+                        console.error('Slow or failed API requests:', failedRequests);
+                    }
+                    
+                    throw new Error(`Expected to be redirected to verify-email page, but got: ${currentUrl}. Check network requests for errors.`);
+                }
             }
             
-            // Check if we're redirected to OTP page
-            const currentUrl = this.page.url();
-            console.log('Current URL after signup:', currentUrl);
-            if (!currentUrl.includes('/verify-email')) {
-                throw new Error(`Expected to be redirected to verify-email page, but got: ${currentUrl}`);
+            // Final verification
+            const finalUrl = this.page.url();
+            if (!finalUrl.includes('/verify-email')) {
+                throw new Error(`Expected to be on verify-email page, but got: ${finalUrl}`);
             }
+            
+            console.log('Signup form submitted successfully');
         } catch (error) {
             console.error('Error during signup:', error);
+            
+            // Take a screenshot for debugging
+            await this.page.screenshot({ 
+                path: `signup-error-${Date.now()}.png`,
+                fullPage: true 
+            });
+            
             throw error;
         }
     }
