@@ -60,15 +60,40 @@ test.describe('User Registration', () => {
             await signupPage.navigateToSignup();
             await signupPage.fillSignupForm(newUserEmail, newUserPassword);
             
-            // Get and enter OTP with timeout
+            // Get and enter OTP with timeout and verification
+            console.log('Waiting for OTP...');
             const otp = await signupPage.getOTPFromWebhook(request, uuid);
+            console.log('Received OTP, entering...');
             await signupPage.enterOTP(otp);
             
-            // Verify success with explicit wait
+            // Verify success with explicit wait and additional checks
+            console.log('Verifying email success...');
             const isVerified = await signupPage.verifyEmailSuccess();
             expect(isVerified).toBeTruthy();
             
-            console.log('Successfully created and verified new user:', {
+            // Additional verification - try to log in immediately after verification
+            console.log('Attempting immediate login after verification...');
+            const loginPage = new LoginPage(page);
+            await loginPage.navigateToLoginPage();
+            await loginPage.login(newUserEmail, newUserPassword);
+            
+            // Wait for navigation and verify login success
+            await page.waitForLoadState('networkidle');
+            const isLoggedIn = await page.getByRole('button', { name: 'Profile' }).isVisible();
+            if (!isLoggedIn) {
+                console.error('Initial login verification failed');
+                console.log('Current URL:', await page.url());
+                console.log('Page content:', await page.content());
+                throw new Error('Initial login verification failed after user creation');
+            }
+            console.log('Initial login verification successful');
+            
+            // Logout to ensure clean state for subsequent tests
+            await page.getByRole('button', { name: 'Profile' }).click();
+            await page.getByRole('button', { name: 'Logout' }).click();
+            await page.waitForLoadState('networkidle');
+            
+            console.log('Successfully created, verified, and tested login for new user:', {
                 email: newUserEmail,
                 password: newUserPassword
             });
@@ -77,6 +102,8 @@ test.describe('User Registration', () => {
                 console.warn('Cognito email limit reached. Consider configuring SES or using a different user pool for testing.');
                 throw new Error('Test failed due to Cognito email limit. Please configure SES or use a different user pool for testing.');
             }
+            console.error('User creation/verification failed:', error);
+            await page.screenshot({ path: 'test-results/user-creation-failure.png', fullPage: true });
             throw error;
         }
     });
@@ -91,29 +118,51 @@ test.describe('User Profile and Preferences', () => {
         try {
             console.log(`Starting profile preferences test with newly created user: ${newUserEmail}`);
             
-            // Login with newly created user
+            // Login with newly created user with retry
             console.log('Logging in...');
             await loginPage.navigateToLoginPage();
             console.log(`Attempting login with email: ${newUserEmail}`);
-            await loginPage.login(newUserEmail, newUserPassword);
             
-            // Wait for navigation and verify login success
-            console.log('Waiting for navigation after login...');
-            await page.waitForLoadState('networkidle');
+            // Add retry logic for login
+            let loginAttempts = 0;
+            const maxLoginAttempts = 3;
+            let loginSuccessful = false;
             
-            // Take screenshot after login attempt
-            await page.screenshot({ path: 'test-results/post-login-state.png', fullPage: true });
+            while (loginAttempts < maxLoginAttempts && !loginSuccessful) {
+                try {
+                    await loginPage.login(newUserEmail, newUserPassword);
+                    await page.waitForLoadState('networkidle');
+                    
+                    // Verify login success
+                    const isLoggedIn = await page.getByRole('button', { name: 'Profile' }).isVisible();
+                    if (isLoggedIn) {
+                        loginSuccessful = true;
+                        console.log(`Login successful on attempt ${loginAttempts + 1}`);
+                        break;
+                    }
+                    
+                    console.log(`Login attempt ${loginAttempts + 1} failed - Profile button not visible`);
+                    if (loginAttempts < maxLoginAttempts - 1) {
+                        console.log('Waiting before retry...');
+                        await page.waitForTimeout(5000); // Wait 5 seconds before retry
+                    }
+                } catch (error) {
+                    console.error(`Login attempt ${loginAttempts + 1} failed:`, error);
+                    if (loginAttempts < maxLoginAttempts - 1) {
+                        console.log('Waiting before retry...');
+                        await page.waitForTimeout(5000);
+                    }
+                }
+                loginAttempts++;
+            }
             
-            // Verify we're logged in
-            console.log('Checking if login was successful...');
-            const isLoggedIn = await page.getByRole('button', { name: 'Profile' }).isVisible();
-            if (!isLoggedIn) {
-                console.error('Login failed - Profile button not visible');
+            if (!loginSuccessful) {
+                console.error('All login attempts failed');
                 console.log('Current URL:', await page.url());
                 console.log('Page content:', await page.content());
-                throw new Error(`Login failed for user ${newUserEmail} - Profile button not visible`);
+                await page.screenshot({ path: 'test-results/login-failure.png', fullPage: true });
+                throw new Error(`Login failed after ${maxLoginAttempts} attempts for user ${newUserEmail}`);
             }
-            console.log('Login successful');
 
             // Fill all preference steps with explicit waits and logging
             console.log('Starting to fill preferences...');
@@ -161,7 +210,6 @@ test.describe('User Profile and Preferences', () => {
 
         } catch (error) {
             console.error('Test failed:', error);
-            // Take screenshot on failure
             await page.screenshot({ path: 'test-results/profile-preferences-failure.png', fullPage: true });
             throw error;
         }
