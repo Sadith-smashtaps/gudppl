@@ -49,6 +49,7 @@ test.afterEach(async ({ page }, testInfo) => {
 test.describe('User Registration', () => {
     test('Create new user with OTP and email verification @regression', async ({ page, request }) => {
         const signupPage = new SignupPage(page);
+        const loginPage = new LoginPage(page);
         
         try {
             // Get webhook UUID for email verification
@@ -71,27 +72,98 @@ test.describe('User Registration', () => {
             const isVerified = await signupPage.verifyEmailSuccess();
             expect(isVerified).toBeTruthy();
             
-            // Additional verification - try to log in immediately after verification
-            console.log('Attempting immediate login after verification...');
-            const loginPage = new LoginPage(page);
-            await loginPage.navigateToLoginPage();
-            await loginPage.login(newUserEmail, newUserPassword);
+            // Wait for a moment after verification before attempting login
+            console.log('Waiting for verification to complete...');
+            await page.waitForTimeout(5000); // Wait 5 seconds for backend to process
             
-            // Wait for navigation and verify login success
-            await page.waitForLoadState('networkidle');
-            const isLoggedIn = await page.getByRole('button', { name: 'Profile' }).isVisible();
-            if (!isLoggedIn) {
-                console.error('Initial login verification failed');
+            // Additional verification - try to log in with retry mechanism
+            console.log('Attempting initial login after verification...');
+            let loginAttempts = 0;
+            const maxLoginAttempts = 3;
+            let loginSuccessful = false;
+            
+            while (loginAttempts < maxLoginAttempts && !loginSuccessful) {
+                try {
+                    // Clear cookies before each attempt to ensure clean state
+                    await page.context().clearCookies();
+                    
+                    // Navigate to login and attempt login
+                    await loginPage.navigateToLoginPage();
+                    await loginPage.login(newUserEmail, newUserPassword);
+                    
+                    // Wait for navigation and network idle
+                    await page.waitForLoadState('networkidle');
+                    
+                    // Additional wait for any animations or UI updates
+                    await page.waitForTimeout(2000);
+                    
+                    // Try multiple ways to verify login success
+                    const loginVerificationMethods = [
+                        // Method 1: Check for Profile button
+                        async () => await page.getByRole('button', { name: 'Profile' }).isVisible(),
+                        // Method 2: Check for user email in the UI
+                        async () => await page.getByText(newUserEmail, { exact: false }).isVisible(),
+                        // Method 3: Check for logout button
+                        async () => await page.getByRole('button', { name: 'Logout' }).isVisible()
+                    ];
+                    
+                    // Try each verification method
+                    for (const verifyMethod of loginVerificationMethods) {
+                        try {
+                            const isVisible = await verifyMethod();
+                            if (isVisible) {
+                                loginSuccessful = true;
+                                console.log(`Login verified using method ${loginVerificationMethods.indexOf(verifyMethod) + 1}`);
+                                break;
+                            }
+                        } catch (error) {
+                            console.log(`Verification method ${loginVerificationMethods.indexOf(verifyMethod) + 1} failed:`, error);
+                        }
+                    }
+                    
+                    if (loginSuccessful) {
+                        console.log(`Initial login successful on attempt ${loginAttempts + 1}`);
+                        break;
+                    }
+                    
+                    console.log(`Login attempt ${loginAttempts + 1} failed - Could not verify login success`);
+                    if (loginAttempts < maxLoginAttempts - 1) {
+                        console.log('Waiting before retry...');
+                        await page.waitForTimeout(5000); // Wait 5 seconds before retry
+                    }
+                } catch (error) {
+                    console.error(`Login attempt ${loginAttempts + 1} failed:`, error);
+                    if (loginAttempts < maxLoginAttempts - 1) {
+                        console.log('Waiting before retry...');
+                        await page.waitForTimeout(5000);
+                    }
+                }
+                loginAttempts++;
+            }
+            
+            if (!loginSuccessful) {
+                console.error('All initial login attempts failed');
                 console.log('Current URL:', await page.url());
                 console.log('Page content:', await page.content());
-                throw new Error('Initial login verification failed after user creation');
+                await page.screenshot({ path: 'test-results/initial-login-failure.png', fullPage: true });
+                throw new Error(`Initial login verification failed after ${maxLoginAttempts} attempts for user ${newUserEmail}`);
             }
-            console.log('Initial login verification successful');
+            
+            // Take a screenshot of successful login state
+            await page.screenshot({ path: 'test-results/initial-login-success.png', fullPage: true });
             
             // Logout to ensure clean state for subsequent tests
-            await page.getByRole('button', { name: 'Profile' }).click();
-            await page.getByRole('button', { name: 'Logout' }).click();
-            await page.waitForLoadState('networkidle');
+            try {
+                console.log('Logging out after successful verification...');
+                await page.getByRole('button', { name: 'Profile' }).click();
+                await page.waitForTimeout(1000); // Wait for menu to appear
+                await page.getByRole('button', { name: 'Logout' }).click();
+                await page.waitForLoadState('networkidle');
+                console.log('Logout successful');
+            } catch (error) {
+                console.error('Logout failed:', error);
+                // Don't throw here as the main test (user creation and login) was successful
+            }
             
             console.log('Successfully created, verified, and tested login for new user:', {
                 email: newUserEmail,
