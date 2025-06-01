@@ -1,3 +1,8 @@
+// Add global polyfill at the top of the file
+if (typeof global === 'undefined') {
+    (window as any).global = window;
+}
+
 import { test, expect } from '@playwright/test';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
@@ -45,6 +50,75 @@ test.afterEach(async ({ page }, testInfo) => {
     }
 });
 
+// Helper function for login verification
+async function verifyLogin(page: any, email: string) {
+    try {
+        // Wait for network idle and any UI updates
+        await page.waitForLoadState('networkidle');
+        await page.waitForTimeout(2000);
+
+        // Try multiple verification methods
+        const verificationMethods = [
+            // Method 1: Check for Profile button
+            async () => {
+                const profileButton = page.getByRole('button', { name: 'Profile' });
+                return await profileButton.isVisible();
+            },
+            // Method 2: Check for user email
+            async () => {
+                const emailElement = page.getByText(email, { exact: false });
+                return await emailElement.isVisible();
+            },
+            // Method 3: Check for logout button
+            async () => {
+                const logoutButton = page.getByRole('button', { name: 'Logout' });
+                return await logoutButton.isVisible();
+            },
+            // Method 4: Check API response
+            async () => {
+                const response = await page.request.get('https://api.next.gudppl.com/profile/v1/user-profile/');
+                return response.status() === 200;
+            }
+        ];
+
+        for (const method of verificationMethods) {
+            try {
+                const isSuccess = await method();
+                if (isSuccess) {
+                    return { success: true, method: verificationMethods.indexOf(method) + 1 };
+                }
+            } catch (error) {
+                console.log(`Verification method ${verificationMethods.indexOf(method) + 1} failed:`, error);
+            }
+        }
+
+        return { 
+            success: false, 
+            error: 'All verification methods failed',
+            details: {
+                url: await page.url(),
+                content: await page.content()
+            }
+        };
+    } catch (error: any) {
+        return { 
+            success: false, 
+            error: error?.message || 'Unknown error',
+            details: {
+                url: await page.url(),
+                content: await page.content()
+            }
+        };
+    }
+}
+
+// Helper function for exponential backoff
+async function waitWithBackoff(attempt: number, baseDelay: number = 1000) {
+    const delay = Math.min(baseDelay * Math.pow(2, attempt), 10000); // Max 10 seconds
+    console.log(`Waiting ${delay}ms before next attempt...`);
+    await new Promise(resolve => setTimeout(resolve, delay));
+}
+
 // Separate describe blocks for independent test groups
 test.describe('User Registration', () => {
     test('Create new user with OTP and email verification @regression', async ({ page, request }) => {
@@ -53,129 +127,120 @@ test.describe('User Registration', () => {
         
         try {
             // Get webhook UUID for email verification
+            console.log('Setting up webhook for email verification...');
             const uuid = await signupPage.getWebhookUUID(request);
             newUserEmail = `${uuid}@email.webhook.site`;
             console.log('Created new test user:', { email: newUserEmail, password: newUserPassword });
             
             // Navigate and fill signup form with retry
+            console.log('Navigating to signup page...');
             await signupPage.navigateToSignup();
+            
+            console.log('Filling signup form...');
             await signupPage.fillSignupForm(newUserEmail, newUserPassword);
             
-            // Get and enter OTP with timeout and verification
+            // Get and enter OTP with enhanced verification
             console.log('Waiting for OTP...');
             const otp = await signupPage.getOTPFromWebhook(request, uuid);
+            if (!otp) {
+                throw new Error('Failed to receive OTP from webhook');
+            }
             console.log('Received OTP, entering...');
+            
+            // Verify OTP format before entering
+            if (!/^\d{6}$/.test(otp)) {
+                throw new Error(`Invalid OTP format received: ${otp}`);
+            }
+            
             await signupPage.enterOTP(otp);
             
             // Verify success with explicit wait and additional checks
             console.log('Verifying email success...');
             const isVerified = await signupPage.verifyEmailSuccess();
-            expect(isVerified).toBeTruthy();
+            if (!isVerified) {
+                throw new Error('Email verification failed');
+            }
             
-            // Wait for a moment after verification before attempting login
+            // Wait for backend to process verification
             console.log('Waiting for verification to complete...');
-            await page.waitForTimeout(5000); // Wait 5 seconds for backend to process
+            await page.waitForTimeout(5000);
             
-            // Additional verification - try to log in with retry mechanism
+            // Attempt login with exponential backoff
             console.log('Attempting initial login after verification...');
-            let loginAttempts = 0;
             const maxLoginAttempts = 3;
             let loginSuccessful = false;
+            let lastVerificationError = 'Unknown error';
             
-            while (loginAttempts < maxLoginAttempts && !loginSuccessful) {
+            for (let attempt = 0; attempt < maxLoginAttempts && !loginSuccessful; attempt++) {
                 try {
-                    // Clear cookies before each attempt to ensure clean state
+                    // Clear cookies and storage before each attempt
                     await page.context().clearCookies();
+                    await page.evaluate(() => {
+                        localStorage.clear();
+                        sessionStorage.clear();
+                    });
                     
-                    // Navigate to login and attempt login
+                    console.log(`Login attempt ${attempt + 1}...`);
                     await loginPage.navigateToLoginPage();
                     await loginPage.login(newUserEmail, newUserPassword);
                     
-                    // Wait for navigation and network idle
-                    await page.waitForLoadState('networkidle');
-                    
-                    // Additional wait for any animations or UI updates
-                    await page.waitForTimeout(2000);
-                    
-                    // Try multiple ways to verify login success
-                    const loginVerificationMethods = [
-                        // Method 1: Check for Profile button
-                        async () => await page.getByRole('button', { name: 'Profile' }).isVisible(),
-                        // Method 2: Check for user email in the UI
-                        async () => await page.getByText(newUserEmail, { exact: false }).isVisible(),
-                        // Method 3: Check for logout button
-                        async () => await page.getByRole('button', { name: 'Logout' }).isVisible()
-                    ];
-                    
-                    // Try each verification method
-                    for (const verifyMethod of loginVerificationMethods) {
-                        try {
-                            const isVisible = await verifyMethod();
-                            if (isVisible) {
-                                loginSuccessful = true;
-                                console.log(`Login verified using method ${loginVerificationMethods.indexOf(verifyMethod) + 1}`);
-                                break;
-                            }
-                        } catch (error) {
-                            console.log(`Verification method ${loginVerificationMethods.indexOf(verifyMethod) + 1} failed:`, error);
-                        }
-                    }
-                    
-                    if (loginSuccessful) {
-                        console.log(`Initial login successful on attempt ${loginAttempts + 1}`);
+                    const verificationResult = await verifyLogin(page, newUserEmail);
+                    if (verificationResult.success) {
+                        loginSuccessful = true;
+                        console.log(`Login verified using method ${verificationResult.method}`);
                         break;
                     }
                     
-                    console.log(`Login attempt ${loginAttempts + 1} failed - Could not verify login success`);
-                    if (loginAttempts < maxLoginAttempts - 1) {
-                        console.log('Waiting before retry...');
-                        await page.waitForTimeout(5000); // Wait 5 seconds before retry
+                    lastVerificationError = verificationResult.error;
+                    console.log(`Login attempt ${attempt + 1} failed:`, verificationResult.error);
+                    
+                    if (attempt < maxLoginAttempts - 1) {
+                        await waitWithBackoff(attempt);
                     }
-                } catch (error) {
-                    console.error(`Login attempt ${loginAttempts + 1} failed:`, error);
-                    if (loginAttempts < maxLoginAttempts - 1) {
-                        console.log('Waiting before retry...');
-                        await page.waitForTimeout(5000);
+                } catch (error: any) {
+                    lastVerificationError = error?.message || 'Unknown error';
+                    console.error(`Login attempt ${attempt + 1} failed:`, error);
+                    if (attempt < maxLoginAttempts - 1) {
+                        await waitWithBackoff(attempt);
                     }
                 }
-                loginAttempts++;
             }
             
             if (!loginSuccessful) {
-                console.error('All initial login attempts failed');
-                console.log('Current URL:', await page.url());
-                console.log('Page content:', await page.content());
+                console.error('All login attempts failed');
+                console.log('Last error:', lastVerificationError);
                 await page.screenshot({ path: 'test-results/initial-login-failure.png', fullPage: true });
-                throw new Error(`Initial login verification failed after ${maxLoginAttempts} attempts for user ${newUserEmail}`);
+                throw new Error(`Initial login verification failed after ${maxLoginAttempts} attempts for user ${newUserEmail}. Last error: ${lastVerificationError}`);
             }
             
             // Take a screenshot of successful login state
             await page.screenshot({ path: 'test-results/initial-login-success.png', fullPage: true });
             
-            // Logout to ensure clean state for subsequent tests
+            // Logout with proper error handling
             try {
                 console.log('Logging out after successful verification...');
                 await page.getByRole('button', { name: 'Profile' }).click();
-                await page.waitForTimeout(1000); // Wait for menu to appear
+                await page.waitForTimeout(1000);
                 await page.getByRole('button', { name: 'Logout' }).click();
                 await page.waitForLoadState('networkidle');
                 console.log('Logout successful');
             } catch (error) {
                 console.error('Logout failed:', error);
-                // Don't throw here as the main test (user creation and login) was successful
+                // Don't throw as the main test was successful
             }
             
-            console.log('Successfully created, verified, and tested login for new user:', {
+            console.log('Successfully completed user creation and verification:', {
                 email: newUserEmail,
                 password: newUserPassword
             });
         } catch (error: any) {
-            if (error?.message?.includes('Exceeded daily email limit')) {
-                console.warn('Cognito email limit reached. Consider configuring SES or using a different user pool for testing.');
-                throw new Error('Test failed due to Cognito email limit. Please configure SES or use a different user pool for testing.');
-            }
             console.error('User creation/verification failed:', error);
             await page.screenshot({ path: 'test-results/user-creation-failure.png', fullPage: true });
+            
+            if (error?.message?.includes('Exceeded daily email limit')) {
+                throw new Error('Test failed due to Cognito email limit. Please configure SES or use a different user pool for testing.');
+            }
+            
             throw error;
         }
     });
@@ -218,7 +283,7 @@ test.describe('User Profile and Preferences', () => {
                         console.log('Waiting before retry...');
                         await page.waitForTimeout(5000); // Wait 5 seconds before retry
                     }
-                } catch (error) {
+                } catch (error: any) {
                     console.error(`Login attempt ${loginAttempts + 1} failed:`, error);
                     if (loginAttempts < maxLoginAttempts - 1) {
                         console.log('Waiting before retry...');
@@ -280,7 +345,7 @@ test.describe('User Profile and Preferences', () => {
             await expect(welcomeMessage).toHaveText(`Hello, ${firstName}. Welcome to gudppl!`);
             console.log('Welcome message verified successfully');
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Test failed:', error);
             await page.screenshot({ path: 'test-results/profile-preferences-failure.png', fullPage: true });
             throw error;
@@ -320,7 +385,7 @@ test.describe('Organization Management', () => {
 
                 console.log(`Organization ${orgName} created successfully.`);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Test failed:', error);
             await page.screenshot({ path: 'test-results/org-creation-failure.png', fullPage: true });
             throw error;
@@ -363,7 +428,7 @@ test.describe('Hours Management', () => {
 
             // Verify approved hours
             await hoursManagementPage.verifyApprovedHours();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Test failed:', error);
             await page.screenshot({ path: 'test-results/hours-approval-failure.png', fullPage: true });
             throw error;
@@ -527,7 +592,7 @@ test.describe('User Profile', () => {
                 phoneCode: '+971',
                 phoneNumber: '774611558'
             });
-        } catch (error) {
+        } catch (error: any) {
             console.error('Test failed:', error);
             await page.screenshot({ path: 'test-results/profile-update-failure.png', fullPage: true });
             throw error;
@@ -620,7 +685,7 @@ test.describe('Organization', () => {
             await page.getByRole('tab', { name: 'Groups joined' }).click();
             await page.waitForLoadState('networkidle');
             await expect(page.getByText(orgName)).not.toBeVisible();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Test failed:', error);
             await page.screenshot({ path: 'test-results/org-join-leave-failure.png', fullPage: true });
             throw error;
@@ -657,7 +722,7 @@ test.describe('Organization', () => {
                 profileInformation: 'https://www.espncricinfo2024.com/',
                 location: 'Castro Valley, United States'
             });
-        } catch (error) {
+        } catch (error: any) {
             console.error('Test failed:', error);
             await page.screenshot({ path: 'test-results/org-edit-failure.png', fullPage: true });
             throw error;
@@ -754,7 +819,7 @@ test.describe('Organization', () => {
             // Check if there are any error messages
             const errorMessages = await page.getByRole('alert').allTextContents();
             console.log('Error messages:', errorMessages);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Test failed:', error);
             await page.screenshot({ path: 'test-results/org-list-failure.png', fullPage: true });
             throw error;
