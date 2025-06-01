@@ -53,75 +53,114 @@ test.afterEach(async ({ page }, testInfo) => {
 // Helper function for login verification
 async function verifyLogin(page: any, email: string) {
     try {
-        // Increase initial wait time
+        // Wait for any redirects to complete
+        console.log('Waiting for initial page load...');
+        await page.waitForLoadState('domcontentloaded', { timeout: 30000 });
         await page.waitForLoadState('networkidle', { timeout: 30000 });
-        await page.waitForTimeout(5000); // Increased from 2000 to 5000
+        
+        // Log the current URL to see where we are
+        const currentUrl = await page.url();
+        console.log('Current URL after login attempt:', currentUrl);
+        
+        // If we're still on the login page, check for error messages
+        if (currentUrl.includes('/login')) {
+            const errorMessage = await page.getByRole('alert').textContent().catch(() => null);
+            if (errorMessage) {
+                console.log('Login error message:', errorMessage);
+                return { 
+                    success: false, 
+                    error: `Login failed: ${errorMessage}`,
+                    details: { url: currentUrl }
+                };
+            }
+        }
 
-        // Add explicit wait for any loading indicators
+        // Wait for any loading indicators
         try {
-            await page.waitForSelector('[role="progressbar"]', { state: 'hidden', timeout: 10000 });
+            console.log('Checking for loading indicators...');
+            await page.waitForSelector('[role="progressbar"]', { state: 'hidden', timeout: 15000 });
+            console.log('Loading indicators cleared');
         } catch (e) {
             console.log('No loading indicator found or already hidden');
         }
 
-        // Try multiple verification methods with increased timeouts
+        // Take a screenshot of the current state
+        await page.screenshot({ path: 'test-results/login-state.png', fullPage: true });
+
+        // Try to find any of the expected elements without waiting
+        console.log('Checking for login success indicators...');
+        const profileButton = page.getByRole('button', { name: 'Profile' });
+        const emailElement = page.getByText(email, { exact: false });
+        const logoutButton = page.getByRole('button', { name: 'Logout' });
+
+        // Check if any elements are already visible
+        const [profileVisible, emailVisible, logoutVisible] = await Promise.all([
+            profileButton.isVisible().catch(() => false),
+            emailElement.isVisible().catch(() => false),
+            logoutButton.isVisible().catch(() => false)
+        ]);
+
+        console.log('Initial element visibility:', {
+            profileButton: profileVisible,
+            emailElement: emailVisible,
+            logoutButton: logoutVisible
+        });
+
+        // If any element is visible, we're logged in
+        if (profileVisible || emailVisible || logoutVisible) {
+            console.log('Login verified - elements already visible');
+            return { success: true, method: 'immediate' };
+        }
+
+        // If no elements are visible, wait for them with a longer timeout
+        console.log('No elements immediately visible, waiting for them...');
         const verificationMethods = [
-            // Method 1: Check for Profile button with increased timeout
             async () => {
-                const profileButton = page.getByRole('button', { name: 'Profile' });
-                await profileButton.waitFor({ state: 'visible', timeout: 10000 });
-                return await profileButton.isVisible();
+                console.log('Waiting for Profile button...');
+                await profileButton.waitFor({ state: 'visible', timeout: 20000 });
+                return true;
             },
-            // Method 2: Check for user email with increased timeout
             async () => {
-                const emailElement = page.getByText(email, { exact: false });
-                await emailElement.waitFor({ state: 'visible', timeout: 10000 });
-                return await emailElement.isVisible();
+                console.log('Waiting for email element...');
+                await emailElement.waitFor({ state: 'visible', timeout: 20000 });
+                return true;
             },
-            // Method 3: Check for logout button with increased timeout
             async () => {
-                const logoutButton = page.getByRole('button', { name: 'Logout' });
-                await logoutButton.waitFor({ state: 'visible', timeout: 10000 });
-                return await logoutButton.isVisible();
-            },
-            // Method 4: Check API response with increased timeout
-            async () => {
-                const response = await page.request.get('https://api.next.gudppl.com/profile/v1/user-profile/', {
-                    timeout: 10000
-                });
-                return response.status() === 200;
+                console.log('Waiting for Logout button...');
+                await logoutButton.waitFor({ state: 'visible', timeout: 20000 });
+                return true;
             }
         ];
 
-        // Log current page state for debugging
-        console.log('Current URL:', await page.url());
-        console.log('Page title:', await page.title());
-
         for (const method of verificationMethods) {
             try {
-                const isSuccess = await method();
-                if (isSuccess) {
-                    console.log(`Login verified using method ${verificationMethods.indexOf(method) + 1}`);
-                    return { success: true, method: verificationMethods.indexOf(method) + 1 };
-                }
+                await method();
+                console.log(`Login verified using method ${verificationMethods.indexOf(method) + 1}`);
+                return { success: true, method: verificationMethods.indexOf(method) + 1 };
             } catch (error) {
                 console.log(`Verification method ${verificationMethods.indexOf(method) + 1} failed:`, error);
             }
         }
 
-        // Take screenshot before failing
+        // If we get here, all verification methods failed
+        console.log('All verification methods failed');
+        console.log('Page title:', await page.title());
+        console.log('Page content:', await page.content());
+        
+        // Take a final screenshot
         await page.screenshot({ path: 'test-results/login-verification-failure.png', fullPage: true });
         
         return { 
             success: false, 
             error: 'All verification methods failed',
             details: {
-                url: await page.url(),
+                url: currentUrl,
                 title: await page.title(),
                 content: await page.content()
             }
         };
     } catch (error: any) {
+        console.error('Login verification error:', error);
         await page.screenshot({ path: 'test-results/login-verification-error.png', fullPage: true });
         return { 
             success: false, 
