@@ -13,15 +13,26 @@ let newUserEmail: string;
 
 // Configure global timeout and retries
 test.describe.configure({ 
-    timeout: 300000, // 5 minutes per test
+    timeout: 120000, // 2 minutes per test
     retries: 1,      // Only retry once on failure
-    mode: 'parallel' // Run tests in parallel
+    mode: 'serial'   // Run tests sequentially instead of parallel
 });
 
 // Add test isolation using context
 test.beforeEach(async ({ context }) => {
     // Clear cookies for test isolation
     await context.clearCookies();
+    // Add logging for test start
+    console.log(`Starting test: ${test.info().title}`);
+});
+
+// Add test completion logging
+test.afterEach(async ({ page }, testInfo) => {
+    console.log(`Completed test: ${testInfo.title} - Status: ${testInfo.status}`);
+    if (testInfo.status === 'failed') {
+        // Take screenshot on failure
+        await page.screenshot({ path: `test-results/${testInfo.title}-failure.png`, fullPage: true });
+    }
 });
 
 // Separate describe blocks for independent test groups
@@ -114,7 +125,7 @@ test.describe('Organization Management', () => {
         // Login with existing user
         await loginPage.navigateToLoginPage();
         await loginPage.login(existingUserEmail, password);
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
 
         // Create multiple organizations
         for (let i = 1; i <= numberOfOrganizations; i++) {
@@ -147,7 +158,7 @@ test.describe('Hours Management', () => {
         // Login
         await loginPage.navigateToLoginPage();
         await loginPage.login(existingUserEmail, password);
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
 
         // Add hours
         await hoursManagementPage.navigateToAddHours();
@@ -178,7 +189,7 @@ test.describe('Hours Management', () => {
         // Login
         await loginPage.navigateToLoginPage();
         await loginPage.login(existingUserEmail, password);
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
 
         // Add hours
         await hoursManagementPage.navigateToAddHours();
@@ -206,7 +217,7 @@ test.describe('Hours Management', () => {
         // Login as volunteer
         await loginPage.navigateToLoginPage();
         await loginPage.login(existingUserEmail, password);
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
 
         // Submit hours with amendments
         await hoursManagementPage.navigateToAddHours();
@@ -228,7 +239,7 @@ test.describe('Hours Management', () => {
         // Login as organization
         await loginPage.navigateToLoginPage();
         await loginPage.login(existingUserEmail, password);
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
 
         // Navigate to pending hours and make amendments
         await hoursManagementPage.navigateToPendingHoursForAmendment(createdOrgName);
@@ -256,7 +267,7 @@ test.describe('User Profile', () => {
         // Login
         await loginPage.navigateToLoginPage();
         await loginPage.login(existingUserEmail, password);
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
 
         // Navigate to profile and start editing
         await userProfilePage.navigateToProfile();
@@ -338,7 +349,7 @@ test.describe('Organization', () => {
         // Login
         await loginPage.navigateToLoginPage();
         await loginPage.login(existingUserEmail, password);
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
 
         // Generate a new org name for editing
         const randomNumber = organizationPage.getRandomNumber(1, 100588);
@@ -365,17 +376,17 @@ test.describe('Organization', () => {
         // Login
         await loginPage.navigateToLoginPage();
         await loginPage.login(existingUserEmail, password);
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
 
         // Navigate to Impact Report
         await page.getByRole('button', { name: 'Profile', exact: true }).click();
         await page.getByRole('button', { name: 'Impact Report' }).click();
-        await page.waitForTimeout(1500);
+        await page.waitForLoadState('networkidle');
 
         // Copy and verify link sharing
         await page.getByRole('button', { name: 'Copy link' }).click();
         await expect.soft(page.getByText('Link copied to clipboard')).toBeVisible();
-        await page.waitForTimeout(1500);
+        await page.waitForLoadState('networkidle');
     });
 
     test('Login with existing user, join and leave organization @regression', async ({ page }) => {
@@ -385,15 +396,15 @@ test.describe('Organization', () => {
         // Login with existing user
         await loginPage.navigateToLoginPage();
         await loginPage.login(existingUserEmail, password);
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
 
         // Join Organization
         await page.getByRole('button', { name: 'Organizations' }).click();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
 
         // Search for any organization (using a partial name that should match)
         await page.getByPlaceholder('Search by name').fill('Org');
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
 
         // Get the first organization that appears
         const firstOrg = await page.getByRole('cell').filter({ hasText: 'Org' }).first();
@@ -410,52 +421,52 @@ test.describe('Organization', () => {
 
         // Click the organization
         await firstOrg.click();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
 
         // Join the organization
         await page.getByRole('button', { name: 'Join group' }).click();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
         
         // Select roles
         await page.locator('input[name="isVolunteer"]').check();
         await page.locator('input[name="isDonor"]').check();
         await page.getByRole('button', { name: 'Join group' }).click();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
 
         // Verify supporters list
         await page.getByRole('button', { name: 'View supporters' }).click();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
         
         // Verify the user is in supporters list (using email prefix)
         const emailPrefix = existingUserEmail.split('@')[0];
         await expect(page.getByText(emailPrefix, { exact: false })).toBeVisible();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
         
         await page.locator('.MuiGrid-root > .MuiButtonBase-root').first().click();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
 
         // Verify organization in joined groups
         await page.getByRole('button', { name: 'Organizations' }).click();
         await page.getByRole('tab', { name: 'Groups joined' }).click();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
         
         // Verify the organization is in joined groups
         await expect(page.getByText(orgName)).toBeVisible();
         
         // Leave organization
         await page.getByText(orgName).click();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
         await page.getByRole('button', { name: 'Edit groups' }).click();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
         await page.getByRole('button', { name: 'Leave group' }).click();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
         await page.getByRole('button', { name: 'Yes' }).click();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
 
         // Verify organization is no longer in joined groups
         await page.getByRole('button', { name: 'Organizations' }).click();
         await page.getByRole('tab', { name: 'Groups joined' }).click();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
         await expect(page.getByText(orgName)).not.toBeVisible();
     });
 
@@ -465,11 +476,11 @@ test.describe('Organization', () => {
         // Login with the specific account
         await loginPage.navigateToLoginPage();
         await loginPage.login("wishu1219+183@gmail.com", "Bachu@121989");
-        await page.waitForTimeout(2000); // Increased wait time
+        await page.waitForLoadState('networkidle');
 
         // Navigate to Organizations
         await page.getByRole('button', { name: 'Organizations' }).click();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
 
         // Check which tab is active and switch if needed
         const activeTab = (await page.getByRole('tab', { selected: true }).textContent()) || 'All organizations';
@@ -477,7 +488,7 @@ test.describe('Organization', () => {
 
         // Force switch to All organizations tab
         await page.getByRole('tab', { name: 'All organizations' }).click();
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
 
         // Check if table exists
         const tableExists = await page.getByRole('table', { name: 'responsive table' }).isVisible();
@@ -496,25 +507,25 @@ test.describe('Organization', () => {
         if (causesFilter !== 'All causes') {
             await page.getByRole('button', { name: causesFilter }).click();
             await page.getByRole('option', { name: 'All causes' }).click();
-            await page.waitForTimeout(2000);
+            await page.waitForLoadState('networkidle');
         }
 
         // Check if search box exists and try searching
         const searchBox = page.getByPlaceholder('Search by name');
         if (await searchBox.isVisible()) {
             await searchBox.fill('Org'); // Try searching for any organization
-            await page.waitForTimeout(2000);
+            await page.waitForLoadState('networkidle');
             console.log('Search results after searching "Org":', await page.getByText('No results found').isVisible() ? 'No results' : 'Results found');
         }
 
         // Check if we're logged in as the correct user
         await page.getByRole('button', { name: 'Profile', exact: true }).click();
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
         const userEmail = await page.getByText('wishu1219+183@gmail.com').isVisible();
         console.log('Logged in as correct user:', userEmail);
 
         // Take a screenshot for debugging
-        await page.screenshot({ path: 'org-list-debug.png', fullPage: true });
+        await page.screenshot({ path: 'test-results/org-list-debug.png', fullPage: true });
 
         // Log the current URL
         console.log('Current URL:', page.url());

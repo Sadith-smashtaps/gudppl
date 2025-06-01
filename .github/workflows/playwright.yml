@@ -19,7 +19,7 @@ on:
 jobs:
   test:
     name: Run Smoke Tests (Chromium)
-    timeout-minutes: 30
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -39,21 +39,25 @@ jobs:
         # Verify installation
         npx playwright --version
     
+    - name: Create test-results directory
+      run: mkdir -p test-results
+    
     - name: Run Smoke Tests
       run: |
         # Run tests with optimized settings
         PLAYWRIGHT_BROWSERS_PATH=~/.cache/ms-playwright npx playwright test tests/smokeTest.spec.ts \
           --retries=1 \
-          --timeout=300000 \
+          --timeout=120000 \
           --project=chromium \
           --reporter=list,html \
-          --workers=2
+          --workers=1 \
+          --output=test-results
       env:
         CI: true
         PWDEBUG: 0
         # Add environment variables for faster execution
         PLAYWRIGHT_SKIP_BROWSER_GC: 1
-        PLAYWRIGHT_DISABLE_LOGGING: 1
+        PLAYWRIGHT_DISABLE_LOGGING: 0
         # Add environment variables for test stability
         PLAYWRIGHT_HTML_REPORT: ./playwright-report
         PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
@@ -67,7 +71,7 @@ jobs:
         path: playwright-report/
         retention-days: 7
 
-    - name: Upload test results
+    - name: Upload test screenshots
       if: always()
       uses: actions/upload-artifact@v4
       with:
@@ -75,10 +79,10 @@ jobs:
         path: test-results/
         retention-days: 7
 
-    - name: Upload blob report
+    - name: Check test status
       if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: blob-report
-        path: blob-report/
-        retention-days: 7 
+      run: |
+        if [ -f "test-results/*-failure.png" ]; then
+          echo "::warning::Test failures detected. Check the test-results artifact for screenshots."
+          exit 1
+        fi 
