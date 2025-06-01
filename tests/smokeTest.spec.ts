@@ -82,34 +82,75 @@ test.describe('User Profile and Preferences', () => {
         const preferencesPage = new UserPreferencesPage(page);
         const { firstName, lastName, dateOfBirth, phoneNumber, bio } = testData.profilePreferences;
 
-        // Login with existing user - use waitForLoadState instead of timeout
-        await loginPage.navigateToLoginPage();
-        await loginPage.login(existingUserEmail, password);
-        await page.waitForLoadState('networkidle');
+        try {
+            console.log('Starting profile preferences test...');
+            
+            // Login with existing user
+            console.log('Logging in...');
+            await loginPage.navigateToLoginPage();
+            await loginPage.login(existingUserEmail, password);
+            
+            // Wait for navigation and verify login success
+            console.log('Waiting for navigation after login...');
+            await page.waitForLoadState('networkidle');
+            
+            // Verify we're logged in
+            const isLoggedIn = await page.getByRole('button', { name: 'Profile' }).isVisible();
+            if (!isLoggedIn) {
+                throw new Error('Login failed - Profile button not visible');
+            }
+            console.log('Login successful');
 
-        // Fill all preference steps with explicit waits
-        await preferencesPage.fillPersonalInfo(
-            firstName,
-            lastName,
-            dateOfBirth.day,
-            dateOfBirth.month,
-            dateOfBirth.year
-        );
+            // Fill all preference steps with explicit waits and logging
+            console.log('Starting to fill preferences...');
+            
+            // Fill personal info
+            console.log('Filling personal info...');
+            await preferencesPage.fillPersonalInfo(
+                firstName,
+                lastName,
+                dateOfBirth.day,
+                dateOfBirth.month,
+                dateOfBirth.year
+            );
+            console.log('Personal info filled successfully');
 
-        // Use Promise.all for independent operations
-        await Promise.all([
-            preferencesPage.selectCauses(),
-            preferencesPage.selectSDGs()
-        ]);
+            // Use Promise.all for independent operations
+            console.log('Selecting causes and SDGs...');
+            await Promise.all([
+                preferencesPage.selectCauses(),
+                preferencesPage.selectSDGs()
+            ]);
+            console.log('Causes and SDGs selected successfully');
 
-        await preferencesPage.setSkillsAndLanguages();
-        await preferencesPage.setAvailability();
-        await preferencesPage.fillContactAndLocation(phoneNumber);
-        await preferencesPage.completeProfile(bio);
+            console.log('Setting skills and languages...');
+            await preferencesPage.setSkillsAndLanguages();
+            console.log('Skills and languages set successfully');
 
-        // Verify welcome message with explicit wait
-        const welcomeMessage = await preferencesPage.verifyWelcomeMessage(firstName);
-        await expect(welcomeMessage).toHaveText(`Hello, ${firstName}. Welcome to gudppl!`);
+            console.log('Setting availability...');
+            await preferencesPage.setAvailability();
+            console.log('Availability set successfully');
+
+            console.log('Filling contact and location...');
+            await preferencesPage.fillContactAndLocation(phoneNumber);
+            console.log('Contact and location filled successfully');
+
+            console.log('Completing profile...');
+            await preferencesPage.completeProfile(bio);
+            console.log('Profile completed successfully');
+
+            // Verify welcome message with explicit wait
+            console.log('Verifying welcome message...');
+            const welcomeMessage = await preferencesPage.verifyWelcomeMessage(firstName);
+            await expect(welcomeMessage).toHaveText(`Hello, ${firstName}. Welcome to gudppl!`);
+            console.log('Welcome message verified successfully');
+
+        } catch (error) {
+            console.error('Test failed:', error);
+            // Take screenshot on failure
+            await page.screenshot({ path: 'test-results/profile-preferences-failure.png', fullPage: true });
+            throw error;
+        }
     });
 });
 

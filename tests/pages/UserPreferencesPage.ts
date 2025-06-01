@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { Page, expect } from '@playwright/test';
 
 export class UserPreferencesPage {
     private page: Page;
@@ -7,15 +7,77 @@ export class UserPreferencesPage {
         this.page = page;
     }
 
+    async waitForPersonalInfoForm() {
+        // Wait for the form to be visible
+        await this.page.waitForSelector('form', { state: 'visible', timeout: 30000 });
+        
+        // Wait for the first name input specifically
+        const firstNameInput = this.page.getByPlaceholder('Enter your first name');
+        await firstNameInput.waitFor({ state: 'visible', timeout: 30000 });
+        
+        // Log the current URL for debugging
+        console.log('Current URL:', await this.page.url());
+        
+        // Verify we're on the correct page
+        const isOnPreferencesPage = await this.page.getByText('Personal Information').isVisible();
+        if (!isOnPreferencesPage) {
+            throw new Error('Not on preferences page. Current URL: ' + await this.page.url());
+        }
+    }
+
     async fillPersonalInfo(firstName: string, lastName: string, day: string, month: string, year: string) {
-        await this.page.getByPlaceholder('Enter your first name').fill(firstName);
-        await this.page.getByPlaceholder('Enter your last name').fill(lastName);
-        await this.page.getByPlaceholder('DD').fill(day);
-        await this.page.getByPlaceholder('MM').fill(month);
-        await this.page.getByPlaceholder('YYYY').fill(year);
-        await this.page.locator('label').filter({ hasText: 'girl/woman' }).getByLabel('controlled').check();
-        await this.page.getByRole('button', { name: 'Next' }).click();
-        await this.page.waitForTimeout(3400);
+        try {
+            // Wait for the form to be ready
+            await this.waitForPersonalInfoForm();
+            
+            // Fill the form with explicit waits and logging
+            console.log('Filling personal info form...');
+            
+            const firstNameInput = this.page.getByPlaceholder('Enter your first name');
+            await firstNameInput.waitFor({ state: 'visible', timeout: 30000 });
+            await firstNameInput.fill(firstName);
+            console.log('Filled first name');
+            
+            const lastNameInput = this.page.getByPlaceholder('Enter your last name');
+            await lastNameInput.waitFor({ state: 'visible', timeout: 30000 });
+            await lastNameInput.fill(lastName);
+            console.log('Filled last name');
+            
+            const dayInput = this.page.getByPlaceholder('DD');
+            await dayInput.waitFor({ state: 'visible', timeout: 30000 });
+            await dayInput.fill(day);
+            console.log('Filled day');
+            
+            const monthInput = this.page.getByPlaceholder('MM');
+            await monthInput.waitFor({ state: 'visible', timeout: 30000 });
+            await monthInput.fill(month);
+            console.log('Filled month');
+            
+            const yearInput = this.page.getByPlaceholder('YYYY');
+            await yearInput.waitFor({ state: 'visible', timeout: 30000 });
+            await yearInput.fill(year);
+            console.log('Filled year');
+            
+            // Select gender with explicit wait
+            const genderCheckbox = this.page.locator('label').filter({ hasText: 'girl/woman' }).getByLabel('controlled');
+            await genderCheckbox.waitFor({ state: 'visible', timeout: 30000 });
+            await genderCheckbox.check();
+            console.log('Selected gender');
+            
+            // Click next with explicit wait
+            const nextButton = this.page.getByRole('button', { name: 'Next' });
+            await nextButton.waitFor({ state: 'visible', timeout: 30000 });
+            await nextButton.click();
+            console.log('Clicked next button');
+            
+            // Wait for navigation
+            await this.page.waitForLoadState('networkidle');
+        } catch (error) {
+            console.error('Error in fillPersonalInfo:', error);
+            // Take screenshot on error
+            await this.page.screenshot({ path: 'test-results/personal-info-error.png', fullPage: true });
+            throw error;
+        }
     }
 
     async selectCauses() {
