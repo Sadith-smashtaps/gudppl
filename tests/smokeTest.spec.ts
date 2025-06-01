@@ -53,38 +53,55 @@ test.afterEach(async ({ page }, testInfo) => {
 // Helper function for login verification
 async function verifyLogin(page: any, email: string) {
     try {
-        // Wait for network idle and any UI updates
-        await page.waitForLoadState('networkidle');
-        await page.waitForTimeout(2000);
+        // Increase initial wait time
+        await page.waitForLoadState('networkidle', { timeout: 30000 });
+        await page.waitForTimeout(5000); // Increased from 2000 to 5000
 
-        // Try multiple verification methods
+        // Add explicit wait for any loading indicators
+        try {
+            await page.waitForSelector('[role="progressbar"]', { state: 'hidden', timeout: 10000 });
+        } catch (e) {
+            console.log('No loading indicator found or already hidden');
+        }
+
+        // Try multiple verification methods with increased timeouts
         const verificationMethods = [
-            // Method 1: Check for Profile button
+            // Method 1: Check for Profile button with increased timeout
             async () => {
                 const profileButton = page.getByRole('button', { name: 'Profile' });
+                await profileButton.waitFor({ state: 'visible', timeout: 10000 });
                 return await profileButton.isVisible();
             },
-            // Method 2: Check for user email
+            // Method 2: Check for user email with increased timeout
             async () => {
                 const emailElement = page.getByText(email, { exact: false });
+                await emailElement.waitFor({ state: 'visible', timeout: 10000 });
                 return await emailElement.isVisible();
             },
-            // Method 3: Check for logout button
+            // Method 3: Check for logout button with increased timeout
             async () => {
                 const logoutButton = page.getByRole('button', { name: 'Logout' });
+                await logoutButton.waitFor({ state: 'visible', timeout: 10000 });
                 return await logoutButton.isVisible();
             },
-            // Method 4: Check API response
+            // Method 4: Check API response with increased timeout
             async () => {
-                const response = await page.request.get('https://api.next.gudppl.com/profile/v1/user-profile/');
+                const response = await page.request.get('https://api.next.gudppl.com/profile/v1/user-profile/', {
+                    timeout: 10000
+                });
                 return response.status() === 200;
             }
         ];
+
+        // Log current page state for debugging
+        console.log('Current URL:', await page.url());
+        console.log('Page title:', await page.title());
 
         for (const method of verificationMethods) {
             try {
                 const isSuccess = await method();
                 if (isSuccess) {
+                    console.log(`Login verified using method ${verificationMethods.indexOf(method) + 1}`);
                     return { success: true, method: verificationMethods.indexOf(method) + 1 };
                 }
             } catch (error) {
@@ -92,20 +109,26 @@ async function verifyLogin(page: any, email: string) {
             }
         }
 
+        // Take screenshot before failing
+        await page.screenshot({ path: 'test-results/login-verification-failure.png', fullPage: true });
+        
         return { 
             success: false, 
             error: 'All verification methods failed',
             details: {
                 url: await page.url(),
+                title: await page.title(),
                 content: await page.content()
             }
         };
     } catch (error: any) {
+        await page.screenshot({ path: 'test-results/login-verification-error.png', fullPage: true });
         return { 
             success: false, 
             error: error?.message || 'Unknown error',
             details: {
                 url: await page.url(),
+                title: await page.title(),
                 content: await page.content()
             }
         };
