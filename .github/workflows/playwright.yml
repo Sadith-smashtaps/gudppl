@@ -46,14 +46,18 @@ jobs:
           --retries=1 \
           --timeout=300000 \
           --project=chromium \
-          --workers=2 \
-          --reporter=list,html
+          --reporter=list,html \
+          --workers=2
       env:
         CI: true
         PWDEBUG: 0
         # Add environment variables for faster execution
         PLAYWRIGHT_SKIP_BROWSER_GC: 1
         PLAYWRIGHT_DISABLE_LOGGING: 1
+        # Add environment variables for test stability
+        PLAYWRIGHT_HTML_REPORT: ./playwright-report
+        PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
+        PLAYWRIGHT_TEST_BASE_URL: ${{ secrets.TEST_BASE_URL }}
     
     - name: Upload test results
       if: always()

@@ -15,15 +15,13 @@ let newUserEmail: string;
 test.describe.configure({ 
     timeout: 300000, // 5 minutes per test
     retries: 1,      // Only retry once on failure
-    workers: 2       // Run 2 tests in parallel
+    mode: 'parallel' // Run tests in parallel
 });
 
-// Add test isolation
-test.beforeEach(async ({ page }) => {
-    // Clear cookies and storage before each test
-    await page.context().clearCookies();
-    await page.evaluate(() => window.localStorage.clear());
-    await page.evaluate(() => window.sessionStorage.clear());
+// Add test isolation using context
+test.beforeEach(async ({ context }) => {
+    // Clear cookies for test isolation
+    await context.clearCookies();
 });
 
 // Separate describe blocks for independent test groups
