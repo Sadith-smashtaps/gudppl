@@ -1,24 +1,24 @@
-name: Playwright Tests (Chromium Only)
+name: Playwright Tests (Smoke Test Only)
 
 on:
   push:
     branches: [ '**' ]
     paths:
-      - 'tests/**'
+      - 'tests/smokeTest.spec.ts'  # Only trigger on changes to smoke test
       - '.github/workflows/playwright.yml'
       - 'package.json'
       - 'package-lock.json'
   pull_request:
     branches: [ main ]
     paths:
-      - 'tests/**'
+      - 'tests/smokeTest.spec.ts'  # Only trigger on changes to smoke test
       - '.github/workflows/playwright.yml'
       - 'package.json'
       - 'package-lock.json'
 
 jobs:
   test:
-    name: Run Smoke Tests (Chromium)
+    name: Run Smoke Test (Chromium)
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
@@ -42,9 +42,11 @@ jobs:
     - name: Create test-results directory
       run: mkdir -p test-results
     
-    - name: Run Smoke Tests
+    - name: Run Smoke Test
       run: |
-        # Run tests with optimized settings
+        # Explicitly run only smokeTest.spec.ts
+        # This is the only test file that will be executed
+        echo "Running smoke test: tests/smokeTest.spec.ts"
         PLAYWRIGHT_BROWSERS_PATH=~/.cache/ms-playwright npx playwright test tests/smokeTest.spec.ts \
           --retries=1 \
           --timeout=120000 \
