@@ -63,7 +63,7 @@ jobs:
         # Add environment variables for test stability
         PLAYWRIGHT_HTML_REPORT: ./playwright-report
         PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
-        PLAYWRIGHT_TEST_BASE_URL: ${{ secrets.TEST_BASE_URL }}
+        PLAYWRIGHT_TEST_BASE_URL: https://next.gudppl.com
     
     - name: Upload test results
       if: always()
